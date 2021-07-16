@@ -102,7 +102,7 @@ func TestDelegationsIterator(t *testing.T) {
 			},
 			rootDelegation: data.DelegatedRole{Name: "a", Paths: defaultPathPatterns},
 			file:           "",
-			resultOrder:    []string{"a", "b", "a", "e", "d"},
+			resultOrder:    []string{"a", "b", "d", "e"},
 		},
 		{
 			testName: "cycle avoided 2",
@@ -122,7 +122,7 @@ func TestDelegationsIterator(t *testing.T) {
 			},
 			rootDelegation: data.DelegatedRole{Name: "a", Paths: defaultPathPatterns},
 			file:           "",
-			resultOrder:    []string{"a", "a", "b", "a", "b", "c", "c"},
+			resultOrder:    []string{"a", "b", "c"},
 		},
 		{
 			testName: "diamond delegation",
@@ -140,7 +140,7 @@ func TestDelegationsIterator(t *testing.T) {
 			},
 			rootDelegation: data.DelegatedRole{Name: "a", Paths: defaultPathPatterns},
 			file:           "",
-			resultOrder:    []string{"a", "b", "d", "c", "d"},
+			resultOrder:    []string{"a", "b", "d", "c"},
 		},
 	}
 
