@@ -11,19 +11,49 @@ import (
 
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/encrypted"
+	"github.com/theupdateframework/go-tuf/internal/sets"
 	"github.com/theupdateframework/go-tuf/sign"
 	"github.com/theupdateframework/go-tuf/util"
 )
+
+type LocalStore interface {
+	// GetMeta returns a map from manifest file names (e.g. root.json) to their raw JSON payload or an error.
+	GetMeta() (map[string]json.RawMessage, error)
+
+	// SetMeta is used to update a manifest file name with a JSON payload.
+	SetMeta(string, json.RawMessage) error
+
+	// WalkStagedTargets calls targetsFn for each staged target file in paths.
+	//
+	// If paths is empty, all staged target files will be walked.
+	WalkStagedTargets(paths []string, targetsFn TargetsWalkFunc) error
+
+	// Commit is used to publish staged files to the repository
+	Commit(bool, map[string]int, map[string]data.Hashes) error
+
+	// SignersForRole return a list of signing keys for a role.
+	SignersForRole(role string) ([]sign.Signer, error)
+
+	// SignersForRole return a list of signing keys for a role.
+	SignersForKeyIDs(keyIDs []string) []sign.Signer
+
+	// SavePrivateKey adds a signing key to a role.
+	SavePrivateKey(string, *sign.PrivateKey) error
+
+	// Clean is used to remove all staged manifests.
+	Clean() error
+}
 
 func MemoryStore(meta map[string]json.RawMessage, files map[string][]byte) LocalStore {
 	if meta == nil {
 		meta = make(map[string]json.RawMessage)
 	}
 	return &memoryStore{
-		meta:       meta,
-		stagedMeta: make(map[string]json.RawMessage),
-		files:      files,
-		signers:    make(map[string][]sign.Signer),
+		meta:           meta,
+		stagedMeta:     make(map[string]json.RawMessage),
+		files:          files,
+		signerForKeyID: make(map[string]sign.Signer),
+		keyIDsForRole:  make(map[string][]string),
 	}
 }
 
@@ -31,7 +61,9 @@ type memoryStore struct {
 	meta       map[string]json.RawMessage
 	stagedMeta map[string]json.RawMessage
 	files      map[string][]byte
-	signers    map[string][]sign.Signer
+
+	signerForKeyID map[string]sign.Signer
+	keyIDsForRole  map[string][]string
 }
 
 func (m *memoryStore) GetMeta() (map[string]json.RawMessage, error) {
@@ -82,12 +114,53 @@ func (m *memoryStore) Commit(consistentSnapshot bool, versions map[string]int, h
 	return nil
 }
 
-func (m *memoryStore) GetSigningKeys(role string) ([]sign.Signer, error) {
-	return m.signers[role], nil
+func (m *memoryStore) SignersForRole(role string) ([]sign.Signer, error) {
+	keyIDs, ok := m.keyIDsForRole[role]
+	if ok {
+		return m.SignersForKeyIDs(keyIDs), nil
+	}
+
+	return nil, nil
+}
+
+func (m *memoryStore) SignersForKeyIDs(keyIDs []string) []sign.Signer {
+	signers := []sign.Signer{}
+	keyIDsSeen := map[string]struct{}{}
+
+	for _, keyID := range keyIDs {
+		signer, ok := m.signerForKeyID[keyID]
+		if !ok {
+			continue
+		}
+		addSigner := false
+
+		for _, skid := range signer.IDs() {
+			if _, seen := keyIDsSeen[skid]; !seen {
+				addSigner = true
+			}
+
+			keyIDsSeen[skid] = struct{}{}
+		}
+
+		if addSigner {
+			signers = append(signers, signer)
+		}
+	}
+
+	return signers
 }
 
 func (m *memoryStore) SavePrivateKey(role string, key *sign.PrivateKey) error {
-	m.signers[role] = append(m.signers[role], key.Signer())
+	signer := key.Signer()
+	keyIDs := signer.IDs()
+
+	for _, keyID := range keyIDs {
+		m.signerForKeyID[keyID] = signer
+	}
+
+	mergedKeyIDs := sets.DeduplicateStrings(append(m.keyIDsForRole[role], keyIDs...))
+	m.keyIDsForRole[role] = mergedKeyIDs
+
 	return nil
 }
 
@@ -104,7 +177,8 @@ func FileSystemStore(dir string, p util.PassphraseFunc) LocalStore {
 	return &fileSystemStore{
 		dir:            dir,
 		passphraseFunc: p,
-		signers:        make(map[string][]sign.Signer),
+		signerForKeyID: make(map[string]sign.Signer),
+		keyIDsForRole:  make(map[string][]string),
 	}
 }
 
@@ -112,8 +186,8 @@ type fileSystemStore struct {
 	dir            string
 	passphraseFunc util.PassphraseFunc
 
-	// signers is a cache of persisted keys to avoid decrypting multiple times
-	signers map[string][]sign.Signer
+	signerForKeyID map[string]sign.Signer
+	keyIDsForRole  map[string][]string
 }
 
 func (f *fileSystemStore) repoDir() string {
@@ -304,10 +378,12 @@ func (f *fileSystemStore) Commit(consistentSnapshot bool, versions map[string]in
 	return f.Clean()
 }
 
-func (f *fileSystemStore) GetSigningKeys(role string) ([]sign.Signer, error) {
-	if keys, ok := f.signers[role]; ok {
-		return keys, nil
+func (f *fileSystemStore) SignersForRole(role string) ([]sign.Signer, error) {
+	keyIDs, ok := f.keyIDsForRole[role]
+	if ok {
+		return f.SignersForKeyIDs(keyIDs), nil
 	}
+
 	keys, _, err := f.loadKeys(role)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -315,8 +391,45 @@ func (f *fileSystemStore) GetSigningKeys(role string) ([]sign.Signer, error) {
 		}
 		return nil, err
 	}
-	f.signers[role] = f.privateKeySigners(keys)
-	return f.signers[role], nil
+
+	signers := f.privateKeySigners(keys)
+
+	for _, signer := range signers {
+		for _, keyID := range signer.IDs() {
+			f.keyIDsForRole[role] = append(f.keyIDsForRole[role], keyID)
+			f.signerForKeyID[keyID] = signer
+		}
+	}
+
+	return signers, nil
+}
+
+func (f *fileSystemStore) SignersForKeyIDs(keyIDs []string) []sign.Signer {
+	signers := []sign.Signer{}
+	keyIDsSeen := map[string]struct{}{}
+
+	for _, keyID := range keyIDs {
+		signer, ok := f.signerForKeyID[keyID]
+		if !ok {
+			continue
+		}
+
+		addSigner := false
+
+		for _, skid := range signer.IDs() {
+			if _, seen := keyIDsSeen[skid]; !seen {
+				addSigner = true
+			}
+
+			keyIDsSeen[skid] = struct{}{}
+		}
+
+		if addSigner {
+			signers = append(signers, signer)
+		}
+	}
+
+	return signers
 }
 
 func (f *fileSystemStore) SavePrivateKey(role string, key *sign.PrivateKey) error {
@@ -362,7 +475,19 @@ func (f *fileSystemStore) SavePrivateKey(role string, key *sign.PrivateKey) erro
 	if err := util.AtomicallyWriteFile(f.keysPath(role), append(data, '\n'), 0600); err != nil {
 		return err
 	}
-	f.signers[role] = f.privateKeySigners(keys)
+
+	signers := f.privateKeySigners(keys)
+	for _, signer := range signers {
+		keyIDs := signer.IDs()
+
+		for _, keyID := range keyIDs {
+			f.signerForKeyID[keyID] = signer
+		}
+
+		mergedKeyIDs := sets.DeduplicateStrings(append(f.keyIDsForRole[role], keyIDs...))
+		f.keyIDsForRole[role] = mergedKeyIDs
+	}
+
 	return nil
 }
 
