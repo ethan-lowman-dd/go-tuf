@@ -43,7 +43,7 @@ func (c *Client) getTargetFileMeta(target string) (data.TargetFileMeta, error) {
 			if err != nil {
 				return data.TargetFileMeta{}, err
 			}
-			err = delegations.Add(targets.Delegations.Roles, d.Delegatee.Name, delegationsVerifier)
+			err = delegations.Add(targets.Delegations.Roles, d.Delegatee.Name, &delegationsVerifier)
 			if err != nil {
 				return data.TargetFileMeta{}, err
 			}
@@ -75,7 +75,7 @@ func (c *Client) loadLocalSnapshot() (*data.Snapshot, error) {
 }
 
 // loadDelegatedTargets downloads, decodes, verifies and stores targets
-func (c *Client) loadDelegatedTargets(snapshot *data.Snapshot, role string, verifier verify.DelegationsVerifier) (*data.Targets, error) {
+func (c *Client) loadDelegatedTargets(snapshot *data.Snapshot, role string, verifier *verify.DelegationsVerifier) (*data.Targets, error) {
 	var err error
 	fileName := role + ".json"
 	fileMeta, ok := snapshot.Meta[fileName]

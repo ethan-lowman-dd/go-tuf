@@ -184,7 +184,7 @@ func TestDelegationsIterator(t *testing.T) {
 				if !ok {
 					continue
 				}
-				err := d.Add(delegations, r.Delegatee.Name, verify.DelegationsVerifier{})
+				err := d.Add(delegations, r.Delegatee.Name, &verify.DelegationsVerifier{})
 				assert.Equal(t, tt.err, err)
 			}
 			assert.Equal(t, tt.resultOrder, iterationOrder)

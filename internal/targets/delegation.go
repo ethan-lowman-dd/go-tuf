@@ -7,7 +7,7 @@ import (
 
 type Delegation struct {
 	Delegator string
-	Verifier  verify.DelegationsVerifier
+	Verifier  *verify.DelegationsVerifier
 	Delegatee data.DelegatedRole
 }
 
@@ -57,7 +57,7 @@ func (d *delegationsIterator) Next() (value Delegation, ok bool) {
 	return delegation, true
 }
 
-func (d *delegationsIterator) Add(roles []data.DelegatedRole, delegator string, verifier verify.DelegationsVerifier) error {
+func (d *delegationsIterator) Add(roles []data.DelegatedRole, delegator string, verifier *verify.DelegationsVerifier) error {
 	for i := len(roles) - 1; i >= 0; i-- {
 		// Push the roles onto the stack in reverse so we get an preorder traversal
 		// of the delegations graph.

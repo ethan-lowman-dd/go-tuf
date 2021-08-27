@@ -802,12 +802,7 @@ func (r *Repo) targetRoleForPath(path string) (roleName string, t *data.Targets,
 			return d.Delegatee.Name, role, nil
 		}
 
-		// The verifier is unused, but removing it requires a breaking API change.
-		verifier, err := verify.NewDelegationsVerifier(role.Delegations)
-		if err != nil {
-			return "", nil, err
-		}
-		iterator.Add(role.Delegations.Roles, d.Delegatee.Name, verifier)
+		iterator.Add(role.Delegations.Roles, d.Delegatee.Name, nil)
 	}
 
 	return "", nil, ErrNoDelegatedTarget{Path: path}
@@ -830,21 +825,19 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		return ErrInvalidExpires{expires}
 	}
 
-	t, err := r.topLevelTargets()
-	if err != nil {
-		return err
-	}
-
 	normalizedPaths := make([]string, len(paths))
 	for i, path := range paths {
 		normalizedPaths[i] = util.NormalizeTarget(path)
 	}
+
+	targetsMetaToWrite := map[string]*data.Targets{}
+
 	if err := r.local.WalkStagedTargets(normalizedPaths, func(path string, target io.Reader) (err error) {
 		roleName, t, err := r.targetRoleForPath(path)
 		if err != nil {
 			return err
 		}
-		_ = roleName
+		fmt.Printf("%+v\n", t)
 
 		meta, err := util.GenerateTargetFileMeta(target, r.hashAlgorithms...)
 		if err != nil {
@@ -856,23 +849,38 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		// existing metadata if present
 		if len(custom) > 0 {
 			meta.Custom = &custom
-		} else if t, ok := t.Targets[path]; ok {
-			meta.Custom = t.Custom
+		} else if tf, ok := t.Targets[path]; ok {
+			meta.Custom = tf.Custom
 		}
 
 		// G2 -> we no longer desire any readers to ever observe non-prefix targets.
 		delete(t.Targets, "/"+path)
 		t.Targets[path] = meta
+
+		targetsMetaToWrite[roleName] = t
+
 		return nil
 	}); err != nil {
 		return err
 	}
-	t.Expires = expires.Round(time.Second)
-	if _, ok := r.versionUpdated["targets.json"]; !ok {
-		t.Version++
-		r.versionUpdated["targets.json"] = struct{}{}
+
+	exp := expires.Round(time.Second)
+	for roleName, t := range targetsMetaToWrite {
+		t.Expires = exp
+		manifestName := roleName + ".json"
+		fmt.Println(manifestName)
+		if _, ok := r.versionUpdated[manifestName]; !ok {
+			t.Version++
+			r.versionUpdated[manifestName] = struct{}{}
+		}
+
+		err := r.setMeta(manifestName, t)
+		if err != nil {
+			return err
+		}
 	}
-	return r.setMeta("targets.json", t)
+
+	return nil
 }
 
 func (r *Repo) RemoveTarget(path string) error {
