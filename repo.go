@@ -837,7 +837,10 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		if err != nil {
 			return err
 		}
-		fmt.Printf("%+v\n", t)
+
+		if seenTarget, ok := targetsMetaToWrite[roleName]; ok {
+			t = seenTarget
+		}
 
 		meta, err := util.GenerateTargetFileMeta(target, r.hashAlgorithms...)
 		if err != nil {
@@ -862,6 +865,14 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		return nil
 	}); err != nil {
 		return err
+	}
+
+	if len(targetsMetaToWrite) == 0 {
+		t, err := r.topLevelTargets()
+		if err != nil {
+			return err
+		}
+		targetsMetaToWrite["targets"] = t
 	}
 
 	exp := expires.Round(time.Second)
