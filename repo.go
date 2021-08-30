@@ -838,6 +838,11 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 			return err
 		}
 
+		// We accumulate changes in the targets manifests staged in
+		// targetsMetaToWrite. If we've already visited a roleName in the
+		// WalkStagedTargets iteration, use the staged metadata instead of the
+		// fresh metadata from targetRoleForPa the original metadata from
+		// targetRoleForPath.
 		if seenTarget, ok := targetsMetaToWrite[roleName]; ok {
 			t = seenTarget
 		}
