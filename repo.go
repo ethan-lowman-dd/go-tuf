@@ -297,11 +297,11 @@ func (r *Repo) targets(roleName string) (*data.Targets, error) {
 	}
 	s := &data.Signed{}
 	if err := json.Unmarshal(targetsJSON, s); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling for targets %q: %w", roleName, err)
 	}
 	targets := &data.Targets{}
 	if err := json.Unmarshal(s.Signed, targets); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("error unmarshalling signed data for targets %q: %w", roleName, err)
 	}
 	return targets, nil
 }
@@ -1020,18 +1020,30 @@ func (r *Repo) fileVersions() (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	targets, err := r.topLevelTargets()
-	if err != nil {
-		return nil, err
-	}
+
 	snapshot, err := r.snapshot()
 	if err != nil {
 		return nil, err
 	}
 	versions := make(map[string]int)
 	versions["root.json"] = root.Version
-	versions["targets.json"] = targets.Version
 	versions["snapshot.json"] = snapshot.Version
+
+	for fileName := range r.meta {
+		roleName := strings.TrimSuffix(fileName, ".json")
+		if !(roleName == "root" ||
+			roleName == "snapshot" ||
+			roleName == "timestamp") {
+
+			delegatedTargets, err := r.targets(roleName)
+			if err != nil {
+				return nil, err
+			}
+
+			versions[fileName] = delegatedTargets.Version
+		}
+	}
+
 	return versions, nil
 }
 
@@ -1139,7 +1151,7 @@ func (r *Repo) Commit() error {
 		return err
 	}
 
-	// We can start incrementing versin numbers again now that we'"ve
+	// We can start incrementing version numbers again now that we've
 	// successfully committed the metadata to the local store.
 	r.versionUpdated = make(map[string]struct{})
 
