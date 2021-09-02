@@ -345,7 +345,7 @@ func (r *Repo) AddPrivateKey(role string, key *sign.PrivateKey) error {
 func (r *Repo) AddPrivateKeyWithExpires(keyRole string, key *sign.PrivateKey, expires time.Time) error {
 	// Not compatible with delegated roles.
 
-	if !verify.ValidRole(keyRole) {
+	if !roles.IsTopLevelRole(keyRole) {
 		return ErrInvalidRole{keyRole}
 	}
 
@@ -449,7 +449,7 @@ func (r *Repo) RevokeKey(role, id string) error {
 func (r *Repo) RevokeKeyWithExpires(keyRole, id string, expires time.Time) error {
 	// Not compatible with delegated roles.
 
-	if !verify.ValidRole(keyRole) {
+	if !roles.IsTopLevelRole(keyRole) {
 		return ErrInvalidRole{keyRole}
 	}
 
@@ -634,7 +634,7 @@ func (r *Repo) setMeta(roleFilename string, meta interface{}) error {
 
 func (r *Repo) Sign(roleFilename string) error {
 	role := strings.TrimSuffix(roleFilename, ".json")
-	if !verify.ValidRole(role) {
+	if !roles.IsTopLevelRole(role) {
 		return ErrInvalidRole{role}
 	}
 
@@ -666,7 +666,7 @@ func (r *Repo) Sign(roleFilename string) error {
 // The name must be a valid manifest name, like root.json.
 func (r *Repo) AddOrUpdateSignature(roleFilename string, signature data.Signature) error {
 	role := strings.TrimSuffix(roleFilename, ".json")
-	if !verify.ValidRole(role) {
+	if !roles.IsTopLevelRole(role) {
 		return ErrInvalidRole{role}
 	}
 
@@ -722,10 +722,12 @@ func (r *Repo) AddOrUpdateSignature(roleFilename string, signature data.Signatur
 // keys are returned (revoked root keys still need to sign new root metadata so
 // clients can verify the new root.json and update their keys db accordingly).
 func (r *Repo) getSigningKeys(name string) ([]sign.Signer, error) {
+	fmt.Println("getting signing keys for", name)
 	signingKeys, err := r.local.GetSigningKeys(name)
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println(signingKeys)
 	if name == "root" {
 		sorted := make([]sign.Signer, len(signingKeys))
 		copy(sorted, signingKeys)
@@ -782,6 +784,10 @@ func (r *Repo) targetRoleForPath(path string) (roleName string, t *data.Targets,
 		if err != nil {
 			return "", nil, err
 		}
+		fmt.Printf("role: %+v\n", role)
+		fmt.Printf("role.Delegations: %+v\n", role.Delegations)
+		fmt.Printf("d: %+v\n", d)
+		fmt.Println()
 
 		if role.Delegations == nil || len(role.Delegations.Roles) == 0 {
 			return d.Delegatee.Name, role, nil
@@ -826,8 +832,7 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		// We accumulate changes in the targets manifests staged in
 		// targetsMetaToWrite. If we've already visited a roleName in the
 		// WalkStagedTargets iteration, use the staged metadata instead of the
-		// fresh metadata from targetRoleForPa the original metadata from
-		// targetRoleForPath.
+		// fresh metadata from targetRoleForPath.
 		if seenTarget, ok := targetsMetaToWrite[roleName]; ok {
 			t = seenTarget
 		}

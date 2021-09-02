@@ -28,7 +28,7 @@ func (c *Client) getTargetFileMeta(target string) (data.TargetFileMeta, error) {
 		}
 
 		// covers 5.6.{1,2,3,4,5,6}
-		targets, err := c.loadDelegatedTargets(snapshot, d.Delegatee.Name, d.Verifier)
+		targets, err := c.loadDelegatedTargets(snapshot, d.Delegatee.Name, d.DB)
 		if err != nil {
 			return data.TargetFileMeta{}, err
 		}
@@ -39,11 +39,11 @@ func (c *Client) getTargetFileMeta(target string) (data.TargetFileMeta, error) {
 		}
 
 		if targets.Delegations != nil {
-			delegationsVerifier, err := verify.NewDelegationsVerifier(targets.Delegations)
+			delegationsDB, err := verify.NewDBFromDelegations(targets.Delegations)
 			if err != nil {
 				return data.TargetFileMeta{}, err
 			}
-			err = delegations.Add(targets.Delegations.Roles, d.Delegatee.Name, &delegationsVerifier)
+			err = delegations.Add(targets.Delegations.Roles, d.Delegatee.Name, delegationsDB)
 			if err != nil {
 				return data.TargetFileMeta{}, err
 			}
@@ -75,7 +75,7 @@ func (c *Client) loadLocalSnapshot() (*data.Snapshot, error) {
 }
 
 // loadDelegatedTargets downloads, decodes, verifies and stores targets
-func (c *Client) loadDelegatedTargets(snapshot *data.Snapshot, role string, verifier *verify.DelegationsVerifier) (*data.Targets, error) {
+func (c *Client) loadDelegatedTargets(snapshot *data.Snapshot, role string, db *verify.DB) (*data.Targets, error) {
 	var err error
 	fileName := role + ".json"
 	fileMeta, ok := snapshot.Meta[fileName]
@@ -101,7 +101,7 @@ func (c *Client) loadDelegatedTargets(snapshot *data.Snapshot, role string, veri
 	if role == "targets" {
 		err = c.db.Unmarshal(raw, targets, role, fileMeta.Version)
 	} else {
-		err = verifier.Unmarshal(raw, targets, role, fileMeta.Version)
+		err = db.Unmarshal(raw, targets, role, fileMeta.Version)
 	}
 	if err != nil {
 		return nil, ErrDecodeFailed{fileName, err}
