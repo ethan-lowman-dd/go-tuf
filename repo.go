@@ -598,7 +598,6 @@ func (r *Repo) setMeta(roleFilename string, meta interface{}) error {
 }
 
 func (r *Repo) setMetaWithSigners(roleFilename string, meta interface{}, signers []sign.Signer) error {
-
 	fmt.Println("signing", roleFilename, signers)
 	s, err := sign.Marshal(meta, signers...)
 	if err != nil {
@@ -707,6 +706,7 @@ func (r *Repo) getSigningKeys(name string) ([]sign.Signer, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Println("first try", signers)
 
 	if name == "root" {
 		sorted := make([]sign.Signer, len(signers))
@@ -899,7 +899,10 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		}
 
 		// signers := r.local.SignersForKeyIDs(twk.keyIDs)
+		// signers, err  := r.local.SignersForRole(roleName)
+		// fmt.Println("signers for", roleName, "are", signers)
 		// err := r.setMetaWithSigners(manifestName, twk.meta, signers)
+		fmt.Println("writing to manifest", manifestName)
 		err := r.setMeta(manifestName, twk.meta)
 		if err != nil {
 			return err

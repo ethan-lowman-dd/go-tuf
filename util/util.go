@@ -266,15 +266,19 @@ func StringSliceToSet(items []string) map[string]struct{} {
 	return s
 }
 
-func Deduplicate(items []string) []string {
-	s := StringSliceToSet(items)
+func StringSetToSlice(items map[string]struct{}) []string {
 	ret := []string{}
 
-	for k := range s {
+	for k := range items {
 		ret = append(ret, k)
 	}
 
 	return ret
+}
+
+func Deduplicate(items []string) []string {
+	s := StringSliceToSet(items)
+	return StringSetToSlice(s)
 }
 
 func AtomicallyWriteFile(filename string, data []byte, perm os.FileMode) error {

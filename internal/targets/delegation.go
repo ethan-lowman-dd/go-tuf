@@ -2,6 +2,7 @@ package targets
 
 import (
 	"github.com/theupdateframework/go-tuf/data"
+	"github.com/theupdateframework/go-tuf/util"
 	"github.com/theupdateframework/go-tuf/verify"
 )
 
@@ -20,12 +21,21 @@ type delegationsIterator struct {
 // NewDelegationsIterator initialises an iterator with a first step
 // on top level targets.
 func NewDelegationsIterator(target string, topLevelKeysDB *verify.DB) *delegationsIterator {
+	role := topLevelKeysDB.GetRole("targets")
+	keyIDs := []string{}
+	if role != nil {
+		keyIDs = util.StringSetToSlice(role.KeyIDs)
+	}
+
 	i := &delegationsIterator{
 		target: target,
 		stack: []Delegation{
 			{
-				Delegatee: data.DelegatedRole{Name: "targets"},
-				DB:        topLevelKeysDB,
+				Delegatee: data.DelegatedRole{
+					Name:   "targets",
+					KeyIDs: keyIDs,
+				},
+				DB: topLevelKeysDB,
 			},
 		},
 		visitedRoles: make(map[string]struct{}),

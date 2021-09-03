@@ -127,7 +127,10 @@ func (m *memoryStore) SignersForKeyIDs(keyIDs []string) []sign.Signer {
 	keyIDsSeen := map[string]struct{}{}
 
 	for _, keyID := range keyIDs {
-		signer := m.signerForKeyID[keyID]
+		signer, ok := m.signerForKeyID[keyID]
+		if !ok {
+			continue
+		}
 		addSigner := false
 
 		for _, skid := range signer.IDs() {
@@ -405,7 +408,11 @@ func (f *fileSystemStore) SignersForKeyIDs(keyIDs []string) []sign.Signer {
 	keyIDsSeen := map[string]struct{}{}
 
 	for _, keyID := range keyIDs {
-		signer := f.signerForKeyID[keyID]
+		signer, ok := f.signerForKeyID[keyID]
+		if !ok {
+			continue
+		}
+
 		addSigner := false
 
 		for _, skid := range signer.IDs() {
