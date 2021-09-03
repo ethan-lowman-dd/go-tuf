@@ -122,19 +122,20 @@ func (m *memoryStore) SignersForRole(role string) ([]sign.Signer, error) {
 	return nil, nil
 }
 
-func (m *memoryStore) SignersForKeyIDs(keyID []string) []sign.Signer {
+func (m *memoryStore) SignersForKeyIDs(keyIDs []string) []sign.Signer {
 	signers := []sign.Signer{}
 	keyIDsSeen := map[string]struct{}{}
 
-	for _, signer := range m.signerForKeyID {
+	for _, keyID := range keyIDs {
+		signer := m.signerForKeyID[keyID]
 		addSigner := false
 
-		for _, keyID := range signer.IDs() {
-			if _, seen := keyIDsSeen[keyID]; !seen {
+		for _, skid := range signer.IDs() {
+			if _, seen := keyIDsSeen[skid]; !seen {
 				addSigner = true
 			}
 
-			keyIDsSeen[keyID] = struct{}{}
+			keyIDsSeen[skid] = struct{}{}
 		}
 
 		if addSigner {
@@ -399,19 +400,20 @@ func (f *fileSystemStore) SignersForRole(role string) ([]sign.Signer, error) {
 	return signers, nil
 }
 
-func (f *fileSystemStore) SignersForKeyIDs(keyID []string) []sign.Signer {
+func (f *fileSystemStore) SignersForKeyIDs(keyIDs []string) []sign.Signer {
 	signers := []sign.Signer{}
 	keyIDsSeen := map[string]struct{}{}
 
-	for _, signer := range f.signerForKeyID {
+	for _, keyID := range keyIDs {
+		signer := f.signerForKeyID[keyID]
 		addSigner := false
 
-		for _, keyID := range signer.IDs() {
-			if _, seen := keyIDsSeen[keyID]; !seen {
+		for _, skid := range signer.IDs() {
+			if _, seen := keyIDsSeen[skid]; !seen {
 				addSigner = true
 			}
 
-			keyIDsSeen[keyID] = struct{}{}
+			keyIDsSeen[skid] = struct{}{}
 		}
 
 		if addSigner {

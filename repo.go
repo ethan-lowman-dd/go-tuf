@@ -898,8 +898,9 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 			r.versionUpdated[manifestName] = struct{}{}
 		}
 
-		signers := r.local.SignersForKeyIDs(twk.keyIDs)
-		err := r.setMetaWithSigners(manifestName, twk.meta, signers)
+		// signers := r.local.SignersForKeyIDs(twk.keyIDs)
+		// err := r.setMetaWithSigners(manifestName, twk.meta, signers)
+		err := r.setMeta(manifestName, twk.meta)
 		if err != nil {
 			return err
 		}
