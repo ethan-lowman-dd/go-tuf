@@ -590,7 +590,11 @@ func (r *Repo) jsonMarshal(v interface{}) ([]byte, error) {
 }
 
 func (r *Repo) setMeta(roleFilename string, meta interface{}) error {
-	signers, err := r.getSigningKeys(strings.TrimSuffix(roleFilename, ".json"))
+	db, err := r.topLevelKeysDB()
+	if err != nil {
+		return err
+	}
+	signers, err := r.getSigningKeys(strings.TrimSuffix(roleFilename, ".json"), db)
 	if err != nil {
 		return err
 	}
@@ -622,7 +626,11 @@ func (r *Repo) Sign(roleFilename string) error {
 		return err
 	}
 
-	keys, err := r.getSigningKeys(role)
+	db, err := r.topLevelKeysDB()
+	if err != nil {
+		return err
+	}
+	keys, err := r.getSigningKeys(role, db)
 	if err != nil {
 		return err
 	}
@@ -700,7 +708,7 @@ func (r *Repo) AddOrUpdateSignature(roleFilename string, signature data.Signatur
 // been revoked are omitted), except for the root role in which case all local
 // keys are returned (revoked root keys still need to sign new root metadata so
 // clients can verify the new root.json and update their keys db accordingly).
-func (r *Repo) getSigningKeys(name string) ([]sign.Signer, error) {
+func (r *Repo) getSigningKeys(name string, db *verify.DB) ([]sign.Signer, error) {
 	fmt.Println("getting signing keys for", name)
 	signers, err := r.local.SignersForRole(name)
 	if err != nil {
@@ -714,10 +722,7 @@ func (r *Repo) getSigningKeys(name string) ([]sign.Signer, error) {
 		sort.Sort(signer.ByIDs(sorted))
 		return sorted, nil
 	}
-	db, err := r.topLevelKeysDB()
-	if err != nil {
-		return nil, err
-	}
+
 	role := db.GetRole(name)
 	if role == nil {
 		return nil, nil
@@ -797,8 +802,8 @@ func (r *Repo) AddTargetWithExpires(path string, custom json.RawMessage, expires
 }
 
 type targetsMetaWithKeys struct {
-	meta   *data.Targets
-	keyIDs []string
+	meta *data.Targets
+	// keyIDs []string
 }
 
 func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, expires time.Time) error {
@@ -820,8 +825,8 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		}
 
 		twk := &targetsMetaWithKeys{
-			meta:   targetsMetaForPath,
-			keyIDs: role.KeyIDs,
+			meta: targetsMetaForPath,
+			// keyIDs: role.KeyIDs,
 		}
 
 		// We accumulate changes in the targets manifests staged in
@@ -832,17 +837,17 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 			// Merge the seen keys with the keys for the new target. If all
 			// delegations to role.Name use the same keys (probably the most common
 			// case with TUF) the merge is a no-op.
-			seenKeys := util.StringSliceToSet(seenMetaWithKeys.keyIDs)
-			mergedKeys := seenMetaWithKeys.keyIDs
+			// seenKeys := util.StringSliceToSet(seenMetaWithKeys.keyIDs)
+			// mergedKeys := seenMetaWithKeys.keyIDs
 
-			for _, keyID := range twk.keyIDs {
-				if _, ok := seenKeys[keyID]; !ok {
-					mergedKeys = append(mergedKeys, keyID)
-					seenKeys[keyID] = struct{}{}
-				}
-			}
+			// for _, keyID := range twk.keyIDs {
+			// 	if _, ok := seenKeys[keyID]; !ok {
+			// 		mergedKeys = append(mergedKeys, keyID)
+			// 		seenKeys[keyID] = struct{}{}
+			// 	}
+			// }
 
-			seenMetaWithKeys.keyIDs = mergedKeys
+			// seenMetaWithKeys.keyIDs = mergedKeys
 			twk = seenMetaWithKeys
 		}
 
@@ -877,14 +882,14 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 			return err
 		}
 
-		root, err := r.root()
-		if err != nil {
-			return err
-		}
+		// root, err := r.root()
+		// if err != nil {
+		// 	return err
+		// }
 
 		targetsMetaToWrite["targets"] = &targetsMetaWithKeys{
-			meta:   t,
-			keyIDs: root.Roles["targets"].KeyIDs,
+			meta: t,
+			// keyIDs: root.Roles["targets"].KeyIDs,
 		}
 	}
 
@@ -899,11 +904,20 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		}
 
 		// signers := r.local.SignersForKeyIDs(twk.keyIDs)
-		// signers, err  := r.local.SignersForRole(roleName)
-		// fmt.Println("signers for", roleName, "are", signers)
-		// err := r.setMetaWithSigners(manifestName, twk.meta, signers)
+		signers, err := r.local.SignersForRole(roleName)
+		fmt.Println("signers for", roleName, "are", signers)
+		err = r.setMetaWithSigners(manifestName, twk.meta, signers)
 		fmt.Println("writing to manifest", manifestName)
-		err := r.setMeta(manifestName, twk.meta)
+
+		// db, err := verify.NewDBFromDelegations(hh)
+		// signers, err := r.getSigningKeys(roleName, db)
+		// if err != nil {
+		// 	return err
+		// }
+
+		// var err error
+		// err = r.setMeta(manifestName, twk.meta)
+
 		if err != nil {
 			return err
 		}
