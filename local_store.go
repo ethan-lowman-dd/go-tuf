@@ -11,6 +11,7 @@ import (
 
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/encrypted"
+	"github.com/theupdateframework/go-tuf/internal/sets"
 	"github.com/theupdateframework/go-tuf/sign"
 	"github.com/theupdateframework/go-tuf/util"
 )
@@ -157,7 +158,7 @@ func (m *memoryStore) SavePrivateKey(role string, key *sign.PrivateKey) error {
 		m.signerForKeyID[keyID] = signer
 	}
 
-	mergedKeyIDs := util.Deduplicate(append(m.keyIDsForRole[role], keyIDs...))
+	mergedKeyIDs := sets.DeduplicateStrings(append(m.keyIDsForRole[role], keyIDs...))
 	m.keyIDsForRole[role] = mergedKeyIDs
 
 	return nil
@@ -483,7 +484,7 @@ func (f *fileSystemStore) SavePrivateKey(role string, key *sign.PrivateKey) erro
 			f.signerForKeyID[keyID] = signer
 		}
 
-		mergedKeyIDs := util.Deduplicate(append(f.keyIDsForRole[role], keyIDs...))
+		mergedKeyIDs := sets.DeduplicateStrings(append(f.keyIDsForRole[role], keyIDs...))
 		f.keyIDsForRole[role] = mergedKeyIDs
 	}
 

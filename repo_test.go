@@ -17,6 +17,7 @@ import (
 
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/encrypted"
+	"github.com/theupdateframework/go-tuf/internal/sets"
 	"github.com/theupdateframework/go-tuf/sign"
 	"github.com/theupdateframework/go-tuf/util"
 	"github.com/theupdateframework/go-tuf/verify"
@@ -195,7 +196,7 @@ func (rs *RepoSuite) TestGenKey(c *C) {
 		c.Assert(rootKey, NotNil)
 		c.Assert(rootKey.IDs(), DeepEquals, ids)
 		role := db.GetRole("root")
-		c.Assert(role.KeyIDs, DeepEquals, util.StringSliceToSet(ids))
+		c.Assert(role.KeyIDs, DeepEquals, sets.StringSliceToSet(ids))
 
 		// check the key was saved correctly
 		localKeys, err := local.SignersForRole("root")
@@ -354,7 +355,7 @@ func (rs *RepoSuite) TestAddPrivateKey(c *C) {
 		c.Assert(rootKey, NotNil)
 		c.Assert(rootKey.IDs(), DeepEquals, ids)
 		role := db.GetRole("root")
-		c.Assert(role.KeyIDs, DeepEquals, util.StringSliceToSet(ids))
+		c.Assert(role.KeyIDs, DeepEquals, sets.StringSliceToSet(ids))
 
 		// check the key was saved correctly
 		localKeys, err := local.SignersForRole("root")

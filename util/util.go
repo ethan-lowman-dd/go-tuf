@@ -258,29 +258,6 @@ func HashedPaths(p string, hashes data.Hashes) []string {
 	return paths
 }
 
-func StringSliceToSet(items []string) map[string]struct{} {
-	s := make(map[string]struct{})
-	for _, item := range items {
-		s[item] = struct{}{}
-	}
-	return s
-}
-
-func StringSetToSlice(items map[string]struct{}) []string {
-	ret := []string{}
-
-	for k := range items {
-		ret = append(ret, k)
-	}
-
-	return ret
-}
-
-func Deduplicate(items []string) []string {
-	s := StringSliceToSet(items)
-	return StringSetToSlice(s)
-}
-
 func AtomicallyWriteFile(filename string, data []byte, perm os.FileMode) error {
 	dir, name := filepath.Split(filename)
 	f, err := ioutil.TempFile(dir, name)

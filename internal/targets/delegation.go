@@ -2,7 +2,7 @@ package targets
 
 import (
 	"github.com/theupdateframework/go-tuf/data"
-	"github.com/theupdateframework/go-tuf/util"
+	"github.com/theupdateframework/go-tuf/internal/sets"
 	"github.com/theupdateframework/go-tuf/verify"
 )
 
@@ -24,7 +24,7 @@ func NewDelegationsIterator(target string, topLevelKeysDB *verify.DB) *delegatio
 	role := topLevelKeysDB.GetRole("targets")
 	keyIDs := []string{}
 	if role != nil {
-		keyIDs = util.StringSetToSlice(role.KeyIDs)
+		keyIDs = sets.StringSetToSlice(role.KeyIDs)
 	}
 
 	i := &delegationsIterator{
