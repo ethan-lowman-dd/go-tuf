@@ -594,7 +594,7 @@ func (r *Repo) setMeta(roleFilename string, meta interface{}) error {
 	if err != nil {
 		return err
 	}
-	signers, err := r.getSigningKeys(strings.TrimSuffix(roleFilename, ".json"), db)
+	signers, err := r.getSignersInDB(strings.TrimSuffix(roleFilename, ".json"), db)
 	if err != nil {
 		return err
 	}
@@ -630,7 +630,7 @@ func (r *Repo) Sign(roleFilename string) error {
 	if err != nil {
 		return err
 	}
-	keys, err := r.getSigningKeys(role, db)
+	keys, err := r.getSignersInDB(role, db)
 	if err != nil {
 		return err
 	}
@@ -702,46 +702,46 @@ func (r *Repo) AddOrUpdateSignature(roleFilename string, signature data.Signatur
 	return r.local.SetMeta(roleFilename, b)
 }
 
-// getSigners returns available signing interfaces.
+// getSignersInDB returns available signing interfaces.
 //
 // Only keys contained in the keys db are returned (i.e. local keys which have
 // been revoked are omitted), except for the root role in which case all local
 // keys are returned (revoked root keys still need to sign new root metadata so
 // clients can verify the new root.json and update their keys db accordingly).
-func (r *Repo) getSigningKeys(name string, db *verify.DB) ([]sign.Signer, error) {
-	fmt.Println("getting signing keys for", name)
-	signers, err := r.local.SignersForRole(name)
+func (r *Repo) getSignersInDB(roleName string, db *verify.DB) ([]sign.Signer, error) {
+	fmt.Println("getting signing keys for", roleName)
+	signers, err := r.local.SignersForRole(roleName)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println("first try", signers)
 
-	if name == "root" {
+	if roleName == "root" {
 		sorted := make([]sign.Signer, len(signers))
 		copy(sorted, signers)
 		sort.Sort(signer.ByIDs(sorted))
 		return sorted, nil
 	}
 
-	role := db.GetRole(name)
+	role := db.GetRole(roleName)
 	if role == nil {
 		return nil, nil
 	}
 	if len(role.KeyIDs) == 0 {
 		return nil, nil
 	}
-	keys := make([]sign.Signer, 0, len(role.KeyIDs))
-	for _, key := range signers {
-		for _, id := range key.IDs() {
+
+	signersInDB := make([]sign.Signer, 0, len(role.KeyIDs))
+	for _, s := range signers {
+		for _, id := range s.IDs() {
 			if _, ok := role.KeyIDs[id]; ok {
-				keys = append(keys, key)
+				signersInDB = append(signersInDB, s)
 			}
 		}
 	}
 
-	sort.Sort(signer.ByIDs(keys))
+	sort.Sort(signer.ByIDs(signersInDB))
 
-	return keys, nil
+	return signersInDB, nil
 }
 
 // Used to retrieve the signable portion of the metadata when using an external signing tool.
@@ -910,7 +910,7 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		// fmt.Println("writing to manifest", manifestName)
 
 		// db, err := verify.NewDBFromDelegations(hh)
-		// signers, err := r.getSigningKeys(roleName, db)
+		// signers, err := r.getSigners(roleName, db)
 		// if err != nil {
 		// 	return err
 		// }

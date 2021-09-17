@@ -25,6 +25,12 @@ import (
 	. "gopkg.in/check.v1"
 )
 
+func sortStrings(in []string) []string {
+	out := append([]string{}, in...)
+	sort.Strings(out)
+	return out
+}
+
 // Hook up gocheck into the "go test" runner.
 func Test(t *testing.T) { TestingT(t) }
 
