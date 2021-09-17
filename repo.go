@@ -527,6 +527,10 @@ func (r *Repo) AddTargetsDelegationWithExpires(delegator string, role data.Deleg
 	}
 
 	delegateeFile := delegatee + ".json"
+	if _, ok := r.versionUpdated[delegateeFile]; !ok {
+		dt.Version++
+		r.versionUpdated[delegateeFile] = struct{}{}
+	}
 	err = r.setMeta(delegateeFile, dt)
 	if err != nil {
 		return fmt.Errorf("error setting metadata for %q: %w", delegateeFile, err)
