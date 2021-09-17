@@ -1,8 +1,6 @@
 package verify
 
 import (
-	"fmt"
-
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/internal/roles"
 )
@@ -91,7 +89,6 @@ func (db *DB) AddRole(name string, r *data.Role) error {
 }
 
 func (db *DB) GetKey(id string) *data.Key {
-	fmt.Println("db is", db.keys)
 	return db.keys[id]
 }
 

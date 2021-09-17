@@ -757,7 +757,7 @@ func (r *Repo) SignedMeta(roleFilename string) (*data.Signed, error) {
 	return s, nil
 }
 
-func (r *Repo) targetRoleForPath(path string) (role *data.DelegatedRole, metadata *data.Targets, err error) {
+func (r *Repo) targetDelegationForPath(path string) (*data.Targets, *targets.Delegation, error) {
 	topLevelKeysDB, err := r.topLevelKeysDB()
 	if err != nil {
 		return nil, nil, err
@@ -770,20 +770,24 @@ func (r *Repo) targetRoleForPath(path string) (role *data.DelegatedRole, metadat
 			return nil, nil, ErrNoDelegatedTarget{Path: path}
 		}
 
-		role, err := r.targets(d.Delegatee.Name)
+		targetsMeta, err := r.targets(d.Delegatee.Name)
 		if err != nil {
 			return nil, nil, err
 		}
-		fmt.Printf("role: %+v\n", role)
-		fmt.Printf("role.Delegations: %+v\n", role.Delegations)
+		fmt.Printf("role: %+v\n", targetsMeta)
+		fmt.Printf("role.Delegations: %+v\n", targetsMeta.Delegations)
 		fmt.Printf("d: %+v\n", d)
 		fmt.Println()
 
-		if role.Delegations == nil || len(role.Delegations.Roles) == 0 {
-			return &d.Delegatee, role, nil
+		if targetsMeta.Delegations == nil || len(targetsMeta.Delegations.Roles) == 0 {
+			return targetsMeta, &d, nil
 		}
 
-		iterator.Add(role.Delegations.Roles, d.Delegatee.Name, nil)
+		db, err := verify.NewDBFromDelegations(targetsMeta.Delegations)
+		if err != nil {
+			return nil, nil, err
+		}
+		iterator.Add(targetsMeta.Delegations.Roles, d.Delegatee.Name, db)
 	}
 
 	return nil, nil, ErrNoDelegatedTarget{Path: path}
@@ -801,9 +805,9 @@ func (r *Repo) AddTargetWithExpires(path string, custom json.RawMessage, expires
 	return r.AddTargetsWithExpires([]string{path}, custom, expires)
 }
 
-type targetsMetaWithKeys struct {
+type targetsMetaWithKeyDB struct {
 	meta *data.Targets
-	// keyIDs []string
+	db   *verify.DB
 }
 
 func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, expires time.Time) error {
@@ -816,28 +820,29 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		normalizedPaths[i] = util.NormalizeTarget(path)
 	}
 
-	targetsMetaToWrite := map[string]*targetsMetaWithKeys{}
+	targetsMetaToWrite := map[string]*targetsMetaWithKeyDB{}
 
 	if err := r.local.WalkStagedTargets(normalizedPaths, func(path string, target io.Reader) (err error) {
-		role, targetsMetaForPath, err := r.targetRoleForPath(path)
+		targetsMeta, delegation, err := r.targetDelegationForPath(path)
 		if err != nil {
 			return err
 		}
+		targetsRoleName := delegation.Delegatee.Name
 
-		twk := &targetsMetaWithKeys{
-			meta: targetsMetaForPath,
-			// keyIDs: role.KeyIDs,
+		twk := &targetsMetaWithKeyDB{
+			meta: targetsMeta,
+			db:   delegation.DB,
 		}
 
 		// We accumulate changes in the targets manifests staged in
 		// targetsMetaToWrite. If we've already visited a roleName in the
 		// WalkStagedTargets iteration, use the staged metadata instead of the
 		// fresh metadata from targetRoleForPath.
-		if seenMetaWithKeys, ok := targetsMetaToWrite[role.Name]; ok {
+		if seenMetaWithKeys, ok := targetsMetaToWrite[targetsRoleName]; ok {
 			// Merge the seen keys with the keys for the new target. If all
 			// delegations to role.Name use the same keys (probably the most common
 			// case with TUF) the merge is a no-op.
-			// seenKeys := util.StringSliceToSet(seenMetaWithKeys.keyIDs)
+			// seenKeys := sets.StringSliceToSet(seenMetaWithKeys.keyIDs)
 			// mergedKeys := seenMetaWithKeys.keyIDs
 
 			// for _, keyID := range twk.keyIDs {
@@ -869,7 +874,7 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		delete(twk.meta.Targets, "/"+path)
 		twk.meta.Targets[path] = meta
 
-		targetsMetaToWrite[role.Name] = twk
+		targetsMetaToWrite[targetsRoleName] = twk
 
 		return nil
 	}); err != nil {
@@ -882,14 +887,14 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 			return err
 		}
 
-		// root, err := r.root()
-		// if err != nil {
-		// 	return err
-		// }
+		db, err := r.topLevelKeysDB()
+		if err != nil {
+			return err
+		}
 
-		targetsMetaToWrite["targets"] = &targetsMetaWithKeys{
+		targetsMetaToWrite["targets"] = &targetsMetaWithKeyDB{
 			meta: t,
-			// keyIDs: root.Roles["targets"].KeyIDs,
+			db:   db,
 		}
 	}
 
@@ -905,22 +910,32 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 
 		// signers := r.local.SignersForKeyIDs(twk.keyIDs)
 		// signers, err := r.local.SignersForRole(roleName)
-		// fmt.Println("signers for", roleName, "are", signers)
-		// err = r.setMetaWithSigners(manifestName, twk.meta, signers)
-		// fmt.Println("writing to manifest", manifestName)
-
-		// db, err := verify.NewDBFromDelegations(hh)
-		// signers, err := r.getSigners(roleName, db)
 		// if err != nil {
 		// 	return err
 		// }
 
-		var err error
-		err = r.setMeta(manifestName, twk.meta)
-
+		// db, err := verify.NewDBFromDelegations(hh)
+		// if err != nil {
+		// 	return err
+		// }
+		signers, err := r.getSignersInDB(roleName, twk.db)
 		if err != nil {
 			return err
 		}
+
+		fmt.Println("signers for", roleName, "are", signers)
+		fmt.Println("writing to manifest", manifestName)
+
+		err = r.setMetaWithSigners(manifestName, twk.meta, signers)
+		if err != nil {
+			return err
+		}
+
+		// var err error
+		// err = r.setMeta(manifestName, twk.meta)
+		// if err != nil {
+		// 	return err
+		// }
 	}
 
 	return nil
@@ -1000,15 +1015,16 @@ func (r *Repo) SnapshotWithExpires(expires time.Time) error {
 	if err != nil {
 		return err
 	}
-	db, err := r.topLevelKeysDB()
-	if err != nil {
-		return err
-	}
+	// db, err := r.topLevelKeysDB()
+	// if err != nil {
+	// 	return err
+	// }
 
 	for _, name := range r.snapshotManifests() {
-		if err := r.verifySignature(name, db); err != nil {
-			return err
-		}
+		fmt.Println("snapshotting", name)
+		// if err := r.verifySignature(name, db); err != nil {
+		// 	return err
+		// }
 		var err error
 		snapshot.Meta[name], err = r.snapshotFileMeta(name)
 		if err != nil {
