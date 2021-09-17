@@ -266,6 +266,17 @@ func StringSliceToSet(items []string) map[string]struct{} {
 	return s
 }
 
+func Deduplicate(items []string) []string {
+	s := StringSliceToSet(items)
+	ret := []string{}
+
+	for k := range s {
+		ret = append(ret, k)
+	}
+
+	return ret
+}
+
 func AtomicallyWriteFile(filename string, data []byte, perm os.FileMode) error {
 	dir, name := filepath.Split(filename)
 	f, err := ioutil.TempFile(dir, name)

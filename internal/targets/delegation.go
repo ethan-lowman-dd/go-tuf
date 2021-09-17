@@ -18,13 +18,14 @@ type delegationsIterator struct {
 }
 
 // NewDelegationsIterator initialises an iterator with a first step
-// on top level targets
-func NewDelegationsIterator(target string) *delegationsIterator {
+// on top level targets.
+func NewDelegationsIterator(target string, topLevelKeysDB *verify.DB) *delegationsIterator {
 	i := &delegationsIterator{
 		target: target,
 		stack: []Delegation{
 			{
 				Delegatee: data.DelegatedRole{Name: "targets"},
+				DB:        topLevelKeysDB,
 			},
 		},
 		visitedRoles: make(map[string]struct{}),

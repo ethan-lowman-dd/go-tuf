@@ -20,7 +20,7 @@ func (c *Client) getTargetFileMeta(target string) (data.TargetFileMeta, error) {
 	// - filter delegations with paths or path_hash_prefixes matching searched target
 	// - 5.6.7.1 cycles protection
 	// - 5.6.7.2 terminations
-	delegations := targets.NewDelegationsIterator(target)
+	delegations := targets.NewDelegationsIterator(target, c.db)
 	for i := 0; i < c.MaxDelegations; i++ {
 		d, ok := delegations.Next()
 		if !ok {
@@ -98,11 +98,7 @@ func (c *Client) loadDelegatedTargets(snapshot *data.Snapshot, role string, db *
 	// 5.6.3 verify signature with parent public keys
 	// 5.6.5 verify that the targets is not expired
 	// role "targets" is a top role verified by root keys loaded in the client db
-	if role == "targets" {
-		err = c.db.Unmarshal(raw, targets, role, fileMeta.Version)
-	} else {
-		err = db.Unmarshal(raw, targets, role, fileMeta.Version)
-	}
+	err = db.Unmarshal(raw, targets, role, fileMeta.Version)
 	if err != nil {
 		return nil, ErrDecodeFailed{fileName, err}
 	}

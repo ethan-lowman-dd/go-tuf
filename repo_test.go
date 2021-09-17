@@ -182,7 +182,7 @@ func (rs *RepoSuite) TestGenKey(c *C) {
 	}
 
 	// check root key + role are in db
-	db, err := r.db()
+	db, err := r.topLevelKeysDB()
 	c.Assert(err, IsNil)
 	for _, keyID := range ids {
 		rootKey := db.GetKey(keyID)
@@ -192,7 +192,7 @@ func (rs *RepoSuite) TestGenKey(c *C) {
 		c.Assert(role.KeyIDs, DeepEquals, util.StringSliceToSet(ids))
 
 		// check the key was saved correctly
-		localKeys, err := local.GetSigningKeys("root")
+		localKeys, err := local.SignersForRole("root")
 		c.Assert(err, IsNil)
 		c.Assert(localKeys, HasLen, 1)
 		c.Assert(localKeys[0].IDs(), DeepEquals, ids)
@@ -224,7 +224,7 @@ func (rs *RepoSuite) TestGenKey(c *C) {
 	}
 	c.Assert(targetsRole.KeyIDs, HasLen, 2)
 	targetKeyIDs := make(map[string]struct{}, 2)
-	db, err = r.db()
+	db, err = r.topLevelKeysDB()
 	c.Assert(err, IsNil)
 	for _, id := range targetsRole.KeyIDs {
 		targetKeyIDs[id] = struct{}{}
@@ -246,7 +246,7 @@ func (rs *RepoSuite) TestGenKey(c *C) {
 	c.Assert(rootKeys[0].IDs(), DeepEquals, rootKey.IDs())
 
 	// check the keys were saved correctly
-	localKeys, err := local.GetSigningKeys("targets")
+	localKeys, err := local.SignersForRole("targets")
 	c.Assert(err, IsNil)
 	c.Assert(localKeys, HasLen, 2)
 	for _, key := range localKeys {
@@ -341,7 +341,7 @@ func (rs *RepoSuite) TestAddPrivateKey(c *C) {
 	}
 
 	// check root key + role are in db
-	db, err := r.db()
+	db, err := r.topLevelKeysDB()
 	c.Assert(err, IsNil)
 	for _, keyID := range ids {
 		rootKey := db.GetKey(keyID)
@@ -351,7 +351,7 @@ func (rs *RepoSuite) TestAddPrivateKey(c *C) {
 		c.Assert(role.KeyIDs, DeepEquals, util.StringSliceToSet(ids))
 
 		// check the key was saved correctly
-		localKeys, err := local.GetSigningKeys("root")
+		localKeys, err := local.SignersForRole("root")
 		c.Assert(err, IsNil)
 		c.Assert(localKeys, HasLen, 1)
 		c.Assert(localKeys[0].IDs(), DeepEquals, ids)
@@ -383,7 +383,7 @@ func (rs *RepoSuite) TestAddPrivateKey(c *C) {
 	}
 	c.Assert(targetsRole.KeyIDs, HasLen, 2)
 	targetKeyIDs := make(map[string]struct{}, 2)
-	db, err = r.db()
+	db, err = r.topLevelKeysDB()
 	c.Assert(err, IsNil)
 	for _, id := range targetsRole.KeyIDs {
 		targetKeyIDs[id] = struct{}{}
@@ -405,7 +405,7 @@ func (rs *RepoSuite) TestAddPrivateKey(c *C) {
 	c.Assert(rootKeys[0].IDs(), DeepEquals, rootKey.IDs())
 
 	// check the keys were saved correctly
-	localKeys, err := local.GetSigningKeys("targets")
+	localKeys, err := local.SignersForRole("targets")
 	c.Assert(err, IsNil)
 	c.Assert(localKeys, HasLen, 2)
 	for _, key := range localKeys {
@@ -1204,7 +1204,7 @@ func (rs *RepoSuite) TestKeyPersistence(c *C) {
 		}
 
 		// check GetKeys is correct
-		signers, err := store.GetSigningKeys(role)
+		signers, err := store.SignersForRole(role)
 		c.Assert(err, IsNil)
 
 		// Compare slices of unique elements disregarding order.
@@ -1607,7 +1607,7 @@ func (rs *RepoSuite) TestBadAddOrUpdateSignatures(c *C) {
 	checkSigIDs := func(role string) {
 		s, err := r.SignedMeta(role)
 		c.Assert(err, IsNil)
-		db, err := r.db()
+		db, err := r.topLevelKeysDB()
 		c.Assert(err, IsNil)
 		// keys is a map of key IDs.
 		keys := db.GetRole(strings.TrimSuffix(role, ".json")).KeyIDs

@@ -171,7 +171,7 @@ func TestDelegationsIterator(t *testing.T) {
 
 	for _, tt := range iteratorTests {
 		t.Run(tt.testName, func(t *testing.T) {
-			d := NewDelegationsIterator(tt.file)
+			d := NewDelegationsIterator(tt.file, nil)
 			var iterationOrder []string
 			for {
 				r, ok := d.Next()
