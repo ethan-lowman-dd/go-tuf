@@ -904,10 +904,10 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		}
 
 		// signers := r.local.SignersForKeyIDs(twk.keyIDs)
-		signers, err := r.local.SignersForRole(roleName)
-		fmt.Println("signers for", roleName, "are", signers)
-		err = r.setMetaWithSigners(manifestName, twk.meta, signers)
-		fmt.Println("writing to manifest", manifestName)
+		// signers, err := r.local.SignersForRole(roleName)
+		// fmt.Println("signers for", roleName, "are", signers)
+		// err = r.setMetaWithSigners(manifestName, twk.meta, signers)
+		// fmt.Println("writing to manifest", manifestName)
 
 		// db, err := verify.NewDBFromDelegations(hh)
 		// signers, err := r.getSigningKeys(roleName, db)
@@ -915,8 +915,8 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		// 	return err
 		// }
 
-		// var err error
-		// err = r.setMeta(manifestName, twk.meta)
+		var err error
+		err = r.setMeta(manifestName, twk.meta)
 
 		if err != nil {
 			return err
