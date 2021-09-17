@@ -2,6 +2,7 @@ package verify
 
 import (
 	"github.com/theupdateframework/go-tuf/data"
+	"github.com/theupdateframework/go-tuf/internal/roles"
 )
 
 type Role struct {
@@ -43,7 +44,7 @@ func NewDelegationsVerifier(d *data.Delegations) (DelegationsVerifier, error) {
 		keys:  make(map[string]*data.Key, len(d.Keys)),
 	}
 	for _, r := range d.Roles {
-		if _, ok := topLevelRoles[r.Name]; ok {
+		if _, ok := roles.TopLevelRoles[r.Name]; ok {
 			return DelegationsVerifier{}, ErrInvalidDelegatedRole
 		}
 		role := &data.Role{Threshold: r.Threshold, KeyIDs: r.KeyIDs}
@@ -76,27 +77,15 @@ func (db *DB) AddKey(id string, k *data.Key) error {
 	return nil
 }
 
-var topLevelRoles = map[string]struct{}{
-	"root":      {},
-	"targets":   {},
-	"snapshot":  {},
-	"timestamp": {},
-}
-
 // ValidRole checks if a role is a top level role.
 func ValidRole(name string) bool {
-	return isTopLevelRole(name)
-}
-
-func isTopLevelRole(name string) bool {
-	_, ok := topLevelRoles[name]
-	return ok
+	return roles.IsTopLevelRole(name)
 }
 
 func (db *DB) AddRole(name string, r *data.Role) error {
-	if !isTopLevelRole(name) {
-		return ErrInvalidRole
-	}
+	// if !roles.IsTopLevelRole(name) {
+	// 	return ErrInvalidRole
+	// }
 	return db.addRole(name, r)
 }
 

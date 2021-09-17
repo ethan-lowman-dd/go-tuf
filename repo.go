@@ -12,6 +12,7 @@ import (
 
 	cjson "github.com/tent/canonical-json-go"
 	"github.com/theupdateframework/go-tuf/data"
+	"github.com/theupdateframework/go-tuf/internal/roles"
 	"github.com/theupdateframework/go-tuf/internal/signer"
 	"github.com/theupdateframework/go-tuf/internal/targets"
 	"github.com/theupdateframework/go-tuf/sign"
@@ -30,15 +31,6 @@ var topLevelManifests = []string{
 	"targets.json",
 	"snapshot.json",
 	"timestamp.json",
-}
-
-// func manifestIsInSnapshot(m string) bool {
-// 	return false
-// }
-
-var snapshotManifests = []string{
-	"root.json",
-	"targets.json",
 }
 
 // TargetsWalkFunc is a function of a target path name and a target payload used to
@@ -142,6 +134,7 @@ func (r *Repo) db() (*verify.DB, error) {
 			return nil, err
 		}
 	}
+
 	return db, nil
 }
 
@@ -199,7 +192,7 @@ func (r *Repo) GetThreshold(keyRole string) (int, error) {
 }
 
 func (r *Repo) SetThreshold(keyRole string, t int) error {
-	if !validManifest(keyRole + ".json") {
+	if !roles.IsTopLevelRole(keyRole) {
 		// Delegations are not currently supported, so return an error if this is not a
 		// top-level manifest.
 		return ErrInvalidRole{keyRole}
@@ -623,6 +616,7 @@ func (r *Repo) jsonMarshal(v interface{}) ([]byte, error) {
 
 func (r *Repo) setMeta(roleFilename string, meta interface{}) error {
 	keys, err := r.getSigningKeys(strings.TrimSuffix(roleFilename, ".json"))
+	fmt.Println("signing", roleFilename, keys)
 	if err != nil {
 		return err
 	}
@@ -776,15 +770,6 @@ func (r *Repo) SignedMeta(roleFilename string) (*data.Signed, error) {
 	return s, nil
 }
 
-func validManifest(roleFilename string) bool {
-	for _, m := range topLevelManifests {
-		if m == roleFilename {
-			return true
-		}
-	}
-	return false
-}
-
 func (r *Repo) targetRoleForPath(path string) (roleName string, t *data.Targets, err error) {
 	iterator := targets.NewDelegationsIterator(path)
 	for i := 0; i < defaultMaxDelegations; i++ {
@@ -883,8 +868,8 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 	exp := expires.Round(time.Second)
 	for roleName, t := range targetsMetaToWrite {
 		t.Expires = exp
+
 		manifestName := roleName + ".json"
-		fmt.Println(manifestName)
 		if _, ok := r.versionUpdated[manifestName]; !ok {
 			t.Version++
 			r.versionUpdated[manifestName] = struct{}{}
@@ -951,6 +936,19 @@ func (r *Repo) Snapshot() error {
 	return r.SnapshotWithExpires(data.DefaultExpires("snapshot"))
 }
 
+func (r *Repo) snapshotManifests() []string {
+	ret := []string{"root.json", "targets.json"}
+
+	for name := range r.meta {
+		if !roles.IsVersionedManifest(name) &&
+			roles.IsDelegatedTargetsManifest(name) {
+			ret = append(ret, name)
+		}
+	}
+
+	return ret
+}
+
 func (r *Repo) SnapshotWithExpires(expires time.Time) error {
 	if !validExpires(expires) {
 		return ErrInvalidExpires{expires}
@@ -965,7 +963,7 @@ func (r *Repo) SnapshotWithExpires(expires time.Time) error {
 		return err
 	}
 
-	for _, name := range snapshotManifests {
+	for _, name := range r.snapshotManifests() {
 		if err := r.verifySignature(name, db); err != nil {
 			return err
 		}
@@ -1016,32 +1014,43 @@ func (r *Repo) TimestampWithExpires(expires time.Time) error {
 }
 
 func (r *Repo) fileVersions() (map[string]int, error) {
-	root, err := r.root()
-	if err != nil {
-		return nil, err
-	}
-
-	snapshot, err := r.snapshot()
-	if err != nil {
-		return nil, err
-	}
 	versions := make(map[string]int)
-	versions["root.json"] = root.Version
-	versions["snapshot.json"] = snapshot.Version
 
 	for fileName := range r.meta {
-		roleName := strings.TrimSuffix(fileName, ".json")
-		if !(roleName == "root" ||
-			roleName == "snapshot" ||
-			roleName == "timestamp") {
+		if roles.IsVersionedManifest(fileName) {
+			continue
+		}
 
-			delegatedTargets, err := r.targets(roleName)
+		roleName := strings.TrimSuffix(fileName, ".json")
+
+		var version int
+
+		switch roleName {
+		case "root":
+			root, err := r.root()
+			if err != nil {
+				return nil, err
+			}
+			version = root.Version
+		case "snapshot":
+			snapshot, err := r.snapshot()
+			if err != nil {
+				return nil, err
+			}
+			version = snapshot.Version
+		case "timestamp":
+			continue
+		default:
+			// Targets or delegated targets manifest.
+			targets, err := r.targets(roleName)
 			if err != nil {
 				return nil, err
 			}
 
-			versions[fileName] = delegatedTargets.Version
+			version = targets.Version
 		}
+
+		versions[fileName] = version
 	}
 
 	return versions, nil
@@ -1049,30 +1058,52 @@ func (r *Repo) fileVersions() (map[string]int, error) {
 
 func (r *Repo) fileHashes() (map[string]data.Hashes, error) {
 	hashes := make(map[string]data.Hashes)
-	timestamp, err := r.timestamp()
-	if err != nil {
-		return nil, err
+
+	for fileName := range r.meta {
+		if roles.IsVersionedManifest(fileName) {
+			continue
+		}
+
+		roleName := strings.TrimSuffix(fileName, ".json")
+
+		switch roleName {
+		case "snapshot":
+			timestamp, err := r.timestamp()
+			if err != nil {
+				return nil, err
+			}
+
+			if m, ok := timestamp.Meta[fileName]; ok {
+				hashes[fileName] = m.Hashes
+			}
+		case "timestamp":
+			continue
+		default:
+			snapshot, err := r.snapshot()
+			if err != nil {
+				return nil, err
+			}
+			if m, ok := snapshot.Meta[fileName]; ok {
+				hashes[fileName] = m.Hashes
+			}
+
+			// FIXME: Loading all targets into memory is not scalable if
+			// there are many targets. This is used to Commit, so we should
+			// only need new targets here.
+			if roleName != "root" {
+				t, err := r.targets(roleName)
+				if err != nil {
+					return nil, err
+				}
+				for name, m := range t.Targets {
+					hashes[path.Join("targets", name)] = m.Hashes
+				}
+			}
+
+		}
+
 	}
-	snapshot, err := r.snapshot()
-	if err != nil {
-		return nil, err
-	}
-	if m, ok := snapshot.Meta["root.json"]; ok {
-		hashes["root.json"] = m.Hashes
-	}
-	if m, ok := snapshot.Meta["targets.json"]; ok {
-		hashes["targets.json"] = m.Hashes
-	}
-	if m, ok := timestamp.Meta["snapshot.json"]; ok {
-		hashes["snapshot.json"] = m.Hashes
-	}
-	t, err := r.topLevelTargets()
-	if err != nil {
-		return nil, err
-	}
-	for name, meta := range t.Targets {
-		hashes[path.Join("targets", name)] = meta.Hashes
-	}
+
 	return hashes, nil
 }
 
@@ -1100,7 +1131,7 @@ func (r *Repo) Commit() error {
 	if err != nil {
 		return err
 	}
-	for _, name := range snapshotManifests {
+	for _, name := range r.snapshotManifests() {
 		expected, ok := snapshot.Meta[name]
 		if !ok {
 			return fmt.Errorf("tuf: snapshot.json missing hash for %s", name)
@@ -1167,6 +1198,7 @@ func (r *Repo) verifySignature(roleFilename string, db *verify.DB) error {
 	if err != nil {
 		return err
 	}
+
 	role := strings.TrimSuffix(roleFilename, ".json")
 	if err := db.Verify(s, role, 0); err != nil {
 		return ErrInsufficientSignatures{roleFilename, err}
