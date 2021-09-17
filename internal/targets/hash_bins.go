@@ -44,9 +44,9 @@ func (b HashBin) Enumerate(padWidth int) []string {
 	return ret
 }
 
-// hashPrefixLength returns the width of hash prefixes if there are
+// HashPrefixLength returns the width of hash prefixes if there are
 // 2^(log2NumBins) hash bins.
-func hashPrefixLength(log2NumBins uint8) int {
+func HashPrefixLength(log2NumBins uint8) int {
 	if log2NumBins == 0 {
 		// Hash prefix of "" is represented equivalently as "0-f".
 		return 1
@@ -62,7 +62,7 @@ func GenerateHashBins(log2NumBins uint8) []HashBin {
 	numBins := uint64(1) << log2NumBins
 
 	// numPrefixes = 16^(HashPrefixLength(log2NumBins))
-	numPrefixes := uint64(1) << (4 * hashPrefixLength(log2NumBins))
+	numPrefixes := uint64(1) << (4 * HashPrefixLength(log2NumBins))
 
 	p := make([]HashBin, numBins)
 

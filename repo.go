@@ -13,9 +13,15 @@ import (
 	cjson "github.com/tent/canonical-json-go"
 	"github.com/theupdateframework/go-tuf/data"
 	"github.com/theupdateframework/go-tuf/internal/signer"
+	"github.com/theupdateframework/go-tuf/internal/targets"
 	"github.com/theupdateframework/go-tuf/sign"
 	"github.com/theupdateframework/go-tuf/util"
 	"github.com/theupdateframework/go-tuf/verify"
+)
+
+const (
+	// The maximum number of delegations to visit while traversing the delegations graph.
+	defaultMaxDelegations = 32
 )
 
 // topLevelManifests determines the order signatures are verified when committing.
@@ -25,6 +31,10 @@ var topLevelManifests = []string{
 	"snapshot.json",
 	"timestamp.json",
 }
+
+// func manifestIsInSnapshot(m string) bool {
+// 	return false
+// }
 
 var snapshotManifests = []string{
 	"root.json",
@@ -96,7 +106,7 @@ func NewRepoIndent(local LocalStore, prefix string, indent string, hashAlgorithm
 }
 
 func (r *Repo) Init(consistentSnapshot bool) error {
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	if err != nil {
 		return err
 	}
@@ -215,7 +225,7 @@ func (r *Repo) SetThreshold(keyRole string, t int) error {
 }
 
 func (r *Repo) Targets() (data.TargetFiles, error) {
-	targets, err := r.targets()
+	targets, err := r.topLevelTargets()
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +233,7 @@ func (r *Repo) Targets() (data.TargetFiles, error) {
 }
 
 func (r *Repo) SetTargetsVersion(v int) error {
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	if err != nil {
 		return err
 	}
@@ -232,7 +242,7 @@ func (r *Repo) SetTargetsVersion(v int) error {
 }
 
 func (r *Repo) TargetsVersion() (int, error) {
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	if err != nil {
 		return -1, err
 	}
@@ -276,8 +286,12 @@ func (r *Repo) SnapshotVersion() (int, error) {
 	return s.Version, nil
 }
 
-func (r *Repo) targets() (*data.Targets, error) {
-	targetsJSON, ok := r.meta["targets.json"]
+func (r *Repo) topLevelTargets() (*data.Targets, error) {
+	return r.targets("targets")
+}
+
+func (r *Repo) targets(roleName string) (*data.Targets, error) {
+	targetsJSON, ok := r.meta[roleName+".json"]
 	if !ok {
 		return data.NewTargets(), nil
 	}
@@ -309,10 +323,14 @@ func (r *Repo) timestamp() (*data.Timestamp, error) {
 }
 
 func (r *Repo) GenKey(role string) ([]string, error) {
+	// Not compatible with delegated roles.
+
 	return r.GenKeyWithExpires(role, data.DefaultExpires("root"))
 }
 
 func (r *Repo) GenKeyWithExpires(keyRole string, expires time.Time) ([]string, error) {
+	// Not compatible with delegated roles.
+
 	key, err := sign.GenerateEd25519Key()
 	if err != nil {
 		return []string{}, err
@@ -326,10 +344,14 @@ func (r *Repo) GenKeyWithExpires(keyRole string, expires time.Time) ([]string, e
 }
 
 func (r *Repo) AddPrivateKey(role string, key *sign.PrivateKey) error {
+	// Not compatible with delegated roles.
+
 	return r.AddPrivateKeyWithExpires(role, key, data.DefaultExpires(role))
 }
 
 func (r *Repo) AddPrivateKeyWithExpires(keyRole string, key *sign.PrivateKey, expires time.Time) error {
+	// Not compatible with delegated roles.
+
 	if !verify.ValidRole(keyRole) {
 		return ErrInvalidRole{keyRole}
 	}
@@ -347,10 +369,14 @@ func (r *Repo) AddPrivateKeyWithExpires(keyRole string, key *sign.PrivateKey, ex
 }
 
 func (r *Repo) AddVerificationKey(keyRole string, pk *data.Key) error {
+	// Not compatible with delegated roles.
+
 	return r.AddVerificationKeyWithExpiration(keyRole, pk, data.DefaultExpires(keyRole))
 }
 
 func (r *Repo) AddVerificationKeyWithExpiration(keyRole string, pk *data.Key, expires time.Time) error {
+	// Not compatible with delegated roles.
+
 	root, err := r.root()
 	if err != nil {
 		return err
@@ -422,10 +448,14 @@ func (r *Repo) RootKeys() ([]*data.Key, error) {
 }
 
 func (r *Repo) RevokeKey(role, id string) error {
+	// Not compatible with delegated roles.
+
 	return r.RevokeKeyWithExpires(role, id, data.DefaultExpires("root"))
 }
 
 func (r *Repo) RevokeKeyWithExpires(keyRole, id string, expires time.Time) error {
+	// Not compatible with delegated roles.
+
 	if !verify.ValidRole(keyRole) {
 		return ErrInvalidRole{keyRole}
 	}
@@ -475,6 +505,102 @@ func (r *Repo) RevokeKeyWithExpires(keyRole, id string, expires time.Time) error
 	}
 
 	return r.setMeta("root.json", root)
+}
+
+// AddTargetsDelegation is equivalent to AddTargetsDelegationWithExpires, but
+// with a default expiration time.
+func (r *Repo) AddTargetsDelegation(delegator string, role data.DelegatedRole, keys []*data.Key) error {
+	return r.AddTargetsDelegationWithExpires(delegator, role, keys, data.DefaultExpires("targets"))
+}
+
+// AddTargetsDelegationWithExpires adds a delegation from the delegator to the
+// role specified in the role argument. Key IDs referenced in role.KeyIDs
+// should have corresponding Key entries in the keys argument. New metadata is
+// written with the given expiration time.
+func (r *Repo) AddTargetsDelegationWithExpires(delegator string, role data.DelegatedRole, keys []*data.Key, expires time.Time) error {
+	t, err := r.targets(delegator)
+	if err != nil {
+		return fmt.Errorf("error getting delegator (%q) metadata: %w", delegator, err)
+	}
+
+	if t.Delegations == nil {
+		t.Delegations = &data.Delegations{}
+	}
+
+	t.Delegations.Keys = make(map[string]*data.Key)
+	for _, keyID := range role.KeyIDs {
+	keyLoop:
+		for _, key := range keys {
+			if key.ContainsID(keyID) {
+				t.Delegations.Keys[keyID] = key
+				break keyLoop
+			}
+		}
+	}
+
+	t.Delegations.Roles = append(t.Delegations.Roles, role)
+	t.Expires = expires.Round(time.Second)
+
+	delegatorFile := delegator + ".json"
+	if _, ok := r.versionUpdated[delegatorFile]; !ok {
+		t.Version++
+		r.versionUpdated[delegatorFile] = struct{}{}
+	}
+
+	err = r.setMeta(delegatorFile, t)
+	if err != nil {
+		return fmt.Errorf("error setting metadata for %q: %w", delegatorFile, err)
+	}
+
+	delegatee := role.Name
+	dt, err := r.targets(delegatee)
+	if err != nil {
+		return fmt.Errorf("error getting delegatee (%q) metadata: %w", delegatee, err)
+	}
+
+	delegateeFile := delegatee + ".json"
+	err = r.setMeta(delegateeFile, dt)
+	if err != nil {
+		return fmt.Errorf("error setting metadata for %q: %w", delegateeFile, err)
+	}
+
+	return nil
+}
+
+// AddTargetsDelegationsForPathHashBins is equivalent to
+// AddTargetsDelegationsForPathHashBinsWithExpires, but with a default
+// expiration time.
+func (r *Repo) AddTargetsDelegationsForPathHashBins(delegator string, binRolePrefix string, log2NumBins uint8, keys []*data.Key, threshold int) error {
+	return r.AddTargetsDelegationsForPathHashBinsWithExpires(delegator, binRolePrefix, log2NumBins, keys, threshold, data.DefaultExpires("targets"))
+}
+
+// AddTargetsDelegationsForPathHashBinsWithExpires adds 2^(log2NumBins)
+// delegations to the delegator role, which partition the target path hash
+// space into bins using the PathHashPrefixes delegation mechanism. New
+// metadata is written with the given expiration time.
+func (r *Repo) AddTargetsDelegationsForPathHashBinsWithExpires(delegator string, binRolePrefix string, log2NumBins uint8, keys []*data.Key, threshold int, expires time.Time) error {
+	bins := targets.GenerateHashBins(log2NumBins)
+	padWidth := targets.HashPrefixLength(log2NumBins)
+
+	keyIDs := []string{}
+	for _, key := range keys {
+		keyIDs = append(keyIDs, key.IDs()...)
+	}
+
+	for _, bin := range bins {
+		name := bin.Name(binRolePrefix, padWidth)
+		err := r.AddTargetsDelegationWithExpires(delegator, data.DelegatedRole{
+			Name:             name,
+			KeyIDs:           keyIDs,
+			PathHashPrefixes: bin.Enumerate(padWidth),
+			Threshold:        threshold,
+		}, keys, expires)
+		if err != nil {
+			return fmt.Errorf("error adding delegation from %v to %v: %w", delegator, name, err)
+		}
+	}
+
+	return nil
 }
 
 func (r *Repo) jsonMarshal(v interface{}) ([]byte, error) {
@@ -659,6 +785,34 @@ func validManifest(roleFilename string) bool {
 	return false
 }
 
+func (r *Repo) targetRoleForPath(path string) (roleName string, t *data.Targets, err error) {
+	iterator := targets.NewDelegationsIterator(path)
+	for i := 0; i < defaultMaxDelegations; i++ {
+		d, ok := iterator.Next()
+		if !ok {
+			return "", nil, ErrNoDelegatedTarget{Path: path}
+		}
+
+		role, err := r.targets(d.Delegatee.Name)
+		if err != nil {
+			return "", nil, err
+		}
+
+		if role.Delegations == nil || len(role.Delegations.Roles) == 0 {
+			return d.Delegatee.Name, role, nil
+		}
+
+		// The verifier is unused, but removing it requires a breaking API change.
+		verifier, err := verify.NewDelegationsVerifier(role.Delegations)
+		if err != nil {
+			return "", nil, err
+		}
+		iterator.Add(role.Delegations.Roles, d.Delegatee.Name, verifier)
+	}
+
+	return "", nil, ErrNoDelegatedTarget{Path: path}
+}
+
 func (r *Repo) AddTarget(path string, custom json.RawMessage) error {
 	return r.AddTargets([]string{path}, custom)
 }
@@ -676,15 +830,22 @@ func (r *Repo) AddTargetsWithExpires(paths []string, custom json.RawMessage, exp
 		return ErrInvalidExpires{expires}
 	}
 
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	if err != nil {
 		return err
 	}
+
 	normalizedPaths := make([]string, len(paths))
 	for i, path := range paths {
 		normalizedPaths[i] = util.NormalizeTarget(path)
 	}
 	if err := r.local.WalkStagedTargets(normalizedPaths, func(path string, target io.Reader) (err error) {
+		roleName, t, err := r.targetRoleForPath(path)
+		if err != nil {
+			return err
+		}
+		_ = roleName
+
 		meta, err := util.GenerateTargetFileMeta(target, r.hashAlgorithms...)
 		if err != nil {
 			return err
@@ -732,7 +893,7 @@ func (r *Repo) RemoveTargetsWithExpires(paths []string, expires time.Time) error
 		return ErrInvalidExpires{expires}
 	}
 
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	if err != nil {
 		return err
 	}
@@ -835,7 +996,7 @@ func (r *Repo) fileVersions() (map[string]int, error) {
 	if err != nil {
 		return nil, err
 	}
-	targets, err := r.targets()
+	targets, err := r.topLevelTargets()
 	if err != nil {
 		return nil, err
 	}
@@ -869,7 +1030,7 @@ func (r *Repo) fileHashes() (map[string]data.Hashes, error) {
 	if m, ok := timestamp.Meta["snapshot.json"]; ok {
 		hashes["snapshot.json"] = m.Hashes
 	}
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	if err != nil {
 		return nil, err
 	}
@@ -954,7 +1115,7 @@ func (r *Repo) Commit() error {
 		return err
 	}
 
-	// We can start incrementing versin numbers again now that we've
+	// We can start incrementing versin numbers again now that we'"ve
 	// successfully committed the metadata to the local store.
 	r.versionUpdated = make(map[string]struct{})
 

@@ -98,7 +98,7 @@ func testNewRepo(c *C, newRepo func(local LocalStore, hashAlgorithms ...string) 
 	c.Assert(root.Keys, NotNil)
 	c.Assert(root.Keys, HasLen, 0)
 
-	targets, err := r.targets()
+	targets, err := r.topLevelTargets()
 	c.Assert(err, IsNil)
 	c.Assert(targets.Type, Equals, "targets")
 	c.Assert(targets.Version, Equals, 1)
@@ -836,7 +836,7 @@ func (rs *RepoSuite) TestCommitFileSystem(c *C) {
 	c.Assert(r.AddTarget("foo.txt", nil), IsNil)
 	tmp.assertExists("staged/targets.json")
 	tmp.assertEmpty("repository")
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	c.Assert(err, IsNil)
 	c.Assert(t.Targets, HasLen, 1)
 	if _, ok := t.Targets["foo.txt"]; !ok {
@@ -987,7 +987,7 @@ func (rs *RepoSuite) TestConsistentSnapshot(c *C) {
 	// targets should be returned by new repo
 	newRepo, err := NewRepo(local, "sha512", "sha256")
 	c.Assert(err, IsNil)
-	t, err := newRepo.targets()
+	t, err := newRepo.topLevelTargets()
 	c.Assert(err, IsNil)
 	c.Assert(t.Targets, HasLen, 1)
 	if _, ok := t.Targets["dir/bar.txt"]; !ok {
@@ -1058,7 +1058,7 @@ func (rs *RepoSuite) TestExpiresAndVersion(c *C) {
 	c.Assert(r.Snapshot(), IsNil)
 	c.Assert(r.Timestamp(), IsNil)
 	c.Assert(r.Commit(), IsNil)
-	targets, err := r.targets()
+	targets, err := r.topLevelTargets()
 	c.Assert(err, IsNil)
 	c.Assert(targets.Expires.Unix(), Equals, expires.Round(time.Second).Unix())
 	c.Assert(targets.Version, Equals, 2)
@@ -1068,7 +1068,7 @@ func (rs *RepoSuite) TestExpiresAndVersion(c *C) {
 	c.Assert(r.Snapshot(), IsNil)
 	c.Assert(r.Timestamp(), IsNil)
 	c.Assert(r.Commit(), IsNil)
-	targets, err = r.targets()
+	targets, err = r.topLevelTargets()
 	c.Assert(err, IsNil)
 	c.Assert(targets.Expires.Unix(), Equals, expires.Round(time.Second).Unix())
 	c.Assert(targets.Version, Equals, 3)
@@ -1136,7 +1136,7 @@ func (rs *RepoSuite) TestHashAlgorithm(c *C) {
 		if test.expected == nil {
 			test.expected = test.args
 		}
-		targets, err := r.targets()
+		targets, err := r.topLevelTargets()
 		c.Assert(err, IsNil)
 		snapshot, err := r.snapshot()
 		c.Assert(err, IsNil)
@@ -1266,7 +1266,7 @@ func (rs *RepoSuite) TestManageMultipleTargets(c *C) {
 	genKey(c, r, "timestamp")
 
 	assertRepoTargets := func(paths ...string) {
-		t, err := r.targets()
+		t, err := r.topLevelTargets()
 		c.Assert(err, IsNil)
 		for _, path := range paths {
 			if _, ok := t.Targets[path]; !ok {
@@ -1312,7 +1312,7 @@ func (rs *RepoSuite) TestManageMultipleTargets(c *C) {
 	c.Assert(r.Timestamp(), IsNil)
 	c.Assert(r.Commit(), IsNil)
 	tmp.assertEmpty("repository/targets")
-	t, err := r.targets()
+	t, err := r.topLevelTargets()
 	c.Assert(err, IsNil)
 	c.Assert(t.Targets, HasLen, 0)
 }
@@ -1329,7 +1329,7 @@ func (rs *RepoSuite) TestCustomTargetMetadata(c *C) {
 
 	custom := json.RawMessage(`{"foo":"bar"}`)
 	assertCustomMeta := func(file string, custom *json.RawMessage) {
-		t, err := r.targets()
+		t, err := r.topLevelTargets()
 		c.Assert(err, IsNil)
 		target, ok := t.Targets[file]
 		if !ok {

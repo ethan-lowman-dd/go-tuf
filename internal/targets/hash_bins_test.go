@@ -49,19 +49,19 @@ func TestHashBin(t *testing.T) {
 }
 
 func TestHashPrefixLength(t *testing.T) {
-	assert.Equal(t, 1, hashPrefixLength(0))
-	assert.Equal(t, 1, hashPrefixLength(1))
-	assert.Equal(t, 1, hashPrefixLength(2))
-	assert.Equal(t, 1, hashPrefixLength(3))
-	assert.Equal(t, 1, hashPrefixLength(4))
-	assert.Equal(t, 2, hashPrefixLength(5))
-	assert.Equal(t, 2, hashPrefixLength(6))
-	assert.Equal(t, 2, hashPrefixLength(7))
-	assert.Equal(t, 2, hashPrefixLength(8))
-	assert.Equal(t, 3, hashPrefixLength(9))
-	assert.Equal(t, 3, hashPrefixLength(10))
-	assert.Equal(t, 3, hashPrefixLength(11))
-	assert.Equal(t, 3, hashPrefixLength(12))
+	assert.Equal(t, 1, HashPrefixLength(0))
+	assert.Equal(t, 1, HashPrefixLength(1))
+	assert.Equal(t, 1, HashPrefixLength(2))
+	assert.Equal(t, 1, HashPrefixLength(3))
+	assert.Equal(t, 1, HashPrefixLength(4))
+	assert.Equal(t, 2, HashPrefixLength(5))
+	assert.Equal(t, 2, HashPrefixLength(6))
+	assert.Equal(t, 2, HashPrefixLength(7))
+	assert.Equal(t, 2, HashPrefixLength(8))
+	assert.Equal(t, 3, HashPrefixLength(9))
+	assert.Equal(t, 3, HashPrefixLength(10))
+	assert.Equal(t, 3, HashPrefixLength(11))
+	assert.Equal(t, 3, HashPrefixLength(12))
 }
 
 func TestGenerateHashBins(t *testing.T) {
@@ -88,7 +88,7 @@ func TestGenerateHashBins(t *testing.T) {
 		bn := []string{}
 		bins := GenerateHashBins(tc.Log2NumBins)
 		for _, b := range bins {
-			bn = append(bn, b.Name("", hashPrefixLength(tc.Log2NumBins)))
+			bn = append(bn, b.Name("", HashPrefixLength(tc.Log2NumBins)))
 		}
 		assert.Equal(t, tc.BinNames, bn, "GenerateHashBins(%v)", tc.Log2NumBins)
 	}
